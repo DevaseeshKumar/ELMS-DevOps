@@ -44,11 +44,18 @@ mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites
             }
         }
 
-        stage('Check Container Logs (Optional)') {
+        stage('Check Container Logs') {
             steps {
                 script {
-                    sh 'docker compose ps'
-                    sh 'docker logs $(docker ps -qf "name=backend") || true'
+                    def isWindows = isUnix() == false
+
+                    if (isWindows) {
+                        bat 'docker compose ps'
+                        bat 'for /f "tokens=*" %i in (\'docker ps -q --filter "name=backend"\') do docker logs %i'
+                    } else {
+                        sh 'docker compose ps'
+                        sh 'docker logs $(docker ps -qf "name=backend") || true'
+                    }
                 }
             }
         }
