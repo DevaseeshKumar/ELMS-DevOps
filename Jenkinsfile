@@ -15,46 +15,28 @@ pipeline {
         stage('Write .env') {
             steps {
                 writeFile file: '.env', text: '''\
+mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites=true&w=majority&appName=Cluster0
 PORT=8000
-SESSION_SECRET=elms-secret-key
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
 EMAIL_USER=thorodinsonuru@gmail.com
 EMAIL_PASS=qzerfjxnvoeupsgp
-mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites=true&w=majority
+FRONTEND_URL=http://localhost:5173
+SESSION_SECRET=elms-secret-key
+NODE_ENV=production
 '''
             }
         }
 
-        stage('Build & Deploy Containers') {
-            steps {
-                script {
-                    def isWindows = isUnix() == false
-                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
-                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
-
-                    if (isWindows) {
-                        bat downCmd
-                        bat upCmd
-                    } else {
-                        sh downCmd
-                        sh upCmd
-                    }
-                }
-            }
-        }
-
-        stage('Check Container Logs') {
+        stage('Build & Deploy') {
             steps {
                 script {
                     def isWindows = isUnix() == false
 
                     if (isWindows) {
-                        bat 'docker compose ps'
-                        bat 'for /f "tokens=*" %i in (\'docker ps -q --filter "name=backend"\') do docker logs %i'
+                        bat 'docker compose -f docker-compose.yml down || exit 0'
+                        bat 'docker compose -f docker-compose.yml up --build -d'
                     } else {
-                        sh 'docker compose ps'
-                        sh 'docker logs $(docker ps -qf "name=backend") || true'
+                        sh 'docker compose -f docker-compose.yml down || exit 0'
+                        sh 'docker compose -f docker-compose.yml up --build -d'
                     }
                 }
             }
@@ -65,9 +47,6 @@ mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites
         failure {
             echo '❌ Pipeline failed. Check Jenkins logs.'
             cleanWs()
-        }
-        success {
-            echo '✅ Pipeline succeeded. Containers are up!'
         }
     }
 }
