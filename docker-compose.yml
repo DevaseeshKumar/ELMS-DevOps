@@ -8,7 +8,7 @@ services:
       - ./backend:/app
       - /app/node_modules
     env_file:
-      - ./backend/.env
+      - .env
     depends_on:
       - mongo
     command: npx nodemon server.js

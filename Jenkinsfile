@@ -19,7 +19,7 @@ mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites
 PORT=8000
 EMAIL_USER=thorodinsonuru@gmail.com
 EMAIL_PASS=qzerfjxnvoeupsgp
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=https://localhost:5173
 SESSION_SECRET=elms-secret-key
 NODE_ENV=production
 '''
@@ -30,13 +30,15 @@ NODE_ENV=production
             steps {
                 script {
                     def isWindows = isUnix() == false
+                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
+                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
 
                     if (isWindows) {
-                        bat 'docker compose -f docker-compose.yml down || exit 0'
-                        bat 'docker compose -f docker-compose.yml up --build -d'
+                        bat downCmd
+                        bat upCmd
                     } else {
-                        sh 'docker compose -f docker-compose.yml down || exit 0'
-                        sh 'docker compose -f docker-compose.yml up --build -d'
+                        sh downCmd
+                        sh upCmd
                     }
                 }
             }
