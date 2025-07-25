@@ -15,18 +15,18 @@ pipeline {
         stage('Write .env') {
             steps {
                 writeFile file: '.env', text: '''\
-mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites=true&w=majority&appName=Cluster0
 PORT=8000
+SESSION_SECRET=elms-secret-key
+NODE_ENV=development
+FRONTEND_URL=http://localhost:5173
 EMAIL_USER=thorodinsonuru@gmail.com
 EMAIL_PASS=qzerfjxnvoeupsgp
-FRONTEND_URL=https://localhost:5173
-SESSION_SECRET=elms-secret-key
-NODE_ENV=production
+mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites=true&w=majority
 '''
             }
         }
 
-        stage('Build & Deploy') {
+        stage('Build & Deploy Containers') {
             steps {
                 script {
                     def isWindows = isUnix() == false
@@ -43,12 +43,24 @@ NODE_ENV=production
                 }
             }
         }
+
+        stage('Check Container Logs (Optional)') {
+            steps {
+                script {
+                    sh 'docker compose ps'
+                    sh 'docker logs $(docker ps -qf "name=backend") || true'
+                }
+            }
+        }
     }
 
     post {
         failure {
             echo '❌ Pipeline failed. Check Jenkins logs.'
             cleanWs()
+        }
+        success {
+            echo '✅ Pipeline succeeded. Containers are up!'
         }
     }
 }
