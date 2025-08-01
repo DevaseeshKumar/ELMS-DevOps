@@ -5,7 +5,8 @@ import { useAdminSession } from "../hooks/useAdminSession";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { ToastContainer, toast } from "react-toastify";
-import { FaUserTie } from "react-icons/fa"; // ✅ Added employee icon
+import { FaUserTie } from "react-icons/fa";
+import QRCode from "react-qr-code";
 import "react-toastify/dist/ReactToastify.css";
 import Footer from "../components/Footer";
 
@@ -16,6 +17,9 @@ const ViewEmployees = () => {
   const [employeeCount, setEmployeeCount] = useState(0);
   const [leavesByEmployee, setLeavesByEmployee] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [qrValue, setQrValue] = useState(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrTimestamp, setQrTimestamp] = useState(null);
 
   useEffect(() => {
     if (!loading && !admin) {
@@ -191,7 +195,6 @@ const ViewEmployees = () => {
       <ToastContainer position="top-right" />
 
       <div className="p-6 max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <h2 className="text-2xl font-bold">All Employees</h2>
           <button
@@ -202,23 +205,20 @@ const ViewEmployees = () => {
           </button>
         </div>
 
-        {/* Total Employees Card with Icon */}
         <div className="flex justify-center mb-10">
-  <div className="flex items-center gap-5 bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 max-w-sm w-full">
-    <div className="bg-gradient-to-br from-green-500 to-teal-500 text-white p-3 rounded-full text-3xl">
-      <FaUserTie />
-    </div>
-    <div>
-      <p className="text-sm uppercase tracking-wide font-semibold text-gray-500">
-        Total Employees
-      </p>
-      <p className="text-3xl font-extrabold text-gray-800">{employeeCount}</p>
-    </div>
-  </div>
-</div>
+          <div className="flex items-center gap-5 bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 max-w-sm w-full">
+            <div className="bg-gradient-to-br from-green-500 to-teal-500 text-white p-3 rounded-full text-3xl">
+              <FaUserTie />
+            </div>
+            <div>
+              <p className="text-sm uppercase tracking-wide font-semibold text-gray-500">
+                Total Employees
+              </p>
+              <p className="text-3xl font-extrabold text-gray-800">{employeeCount}</p>
+            </div>
+          </div>
+        </div>
 
-
-        {/* Cards */}
         {isLoading ? (
           <div className="space-y-4 animate-pulse">
             {[1, 2, 3].map((i) => (
@@ -279,6 +279,26 @@ const ViewEmployees = () => {
                     >
                       Delete
                     </button>
+                    <button
+                     onClick={() => {
+  const timestamp = new Date().toLocaleString();
+  const qrData = `Employee Details:
+ID: ${emp.employeeId}
+Username: ${emp.username}
+Email: ${emp.email}
+Department: ${emp.department}
+Generated At: ${timestamp}
+View Profile: http://localhost:8000/employee/${emp._id}`;
+
+  setQrValue(qrData);
+  setQrTimestamp(timestamp);
+  setQrModalOpen(true);
+}}
+
+                      className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition"
+                    >
+                      Show QR
+                    </button>
                   </div>
                 </div>
               );
@@ -286,6 +306,25 @@ const ViewEmployees = () => {
           </div>
         )}
       </div>
+
+      {/* QR Modal */}
+      {qrModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-80">
+            <h2 className="text-lg font-bold mb-4 text-center">Employee QR Code</h2>
+            <QRCode value={qrValue} size={150} className="mx-auto" />
+            <p className="text-xs mt-2 text-center text-gray-500">Generated: {qrTimestamp}</p>
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => setQrModalOpen(false)}
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-1 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <Footer />
     </div>
   );

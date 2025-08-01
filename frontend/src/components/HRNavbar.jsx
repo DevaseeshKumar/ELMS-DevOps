@@ -60,7 +60,7 @@ const HrNavbar = () => {
         {/* Logo & title */}
         <div className="flex items-center gap-2 font-bold text-lg">
           <FaClipboard className="text-white text-2xl" />
-          <span className="hidden sm:inline">ELMS - HR Portal</span>
+          <span className="hidden sm:inline">Leavo - HR Portal</span>
         </div>
 
         {/* Center: Nav Links with dark background */}

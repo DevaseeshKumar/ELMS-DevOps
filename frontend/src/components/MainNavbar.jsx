@@ -12,7 +12,7 @@ const MainNavbar = () => {
             className="text-3xl font-extrabold text-white tracking-wide drop-shadow-md font-sans"
           >
             <span className="bg-white/20 px-4 py-1 rounded-lg shadow-md hover:bg-white/30 transition">
-              ELMS
+              Leavo
             </span>
           </Link>
 

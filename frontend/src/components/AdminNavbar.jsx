@@ -62,7 +62,7 @@ const AdminNavbar = () => {
         {/* Logo & Title */}
         <div className="flex items-center gap-2 font-bold text-lg">
           <FaClipboard className="text-white text-2xl" />
-          <span className="hidden sm:inline">ELMS - Admin Panel</span>
+          <span className="hidden sm:inline">Leavo - Admin Panel</span>
         </div>
 
         {/* Center Nav Links with dark background */}

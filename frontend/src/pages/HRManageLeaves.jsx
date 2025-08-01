@@ -6,12 +6,18 @@ import HRNavbar from "../components/HRNavbar";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Footer from "../components/Footer";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable"; // ✅ import the default export
+
 
 const HRManageLeaves = () => {
   const { hr, loading } = useHRSession();
   const navigate = useNavigate();
 
   const [leaves, setLeaves] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [rejectingLeaveId, setRejectingLeaveId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [leavesByEmployee, setLeavesByEmployee] = useState({});
@@ -45,18 +51,14 @@ const HRManageLeaves = () => {
       const res = await axios.get("http://localhost:8000/api/hr/leaves", {
         withCredentials: true,
       });
+
       const sortedLeaves = res.data.sort((a, b) => {
-  // 1. Prioritize "Pending" > "Approved" > "Rejected"
-  const statusOrder = { Pending: 0, Approved: 1, Rejected: 2 };
-  const statusCompare = statusOrder[a.status] - statusOrder[b.status];
+        const statusOrder = { Pending: 0, Approved: 1, Rejected: 2 };
+        const statusCompare = statusOrder[a.status] - statusOrder[b.status];
+        return statusCompare !== 0 ? statusCompare : new Date(b.createdAt) - new Date(a.createdAt);
+      });
 
-  if (statusCompare !== 0) return statusCompare;
-
-  // 2. If same status, sort by newest createdAt first
-  return new Date(b.createdAt) - new Date(a.createdAt);
-});
-
-setLeaves(sortedLeaves);
+      setLeaves(sortedLeaves);
 
       const empMap = {};
       sortedLeaves.forEach((leave) => {
@@ -99,10 +101,7 @@ setLeaves(sortedLeaves);
         `http://localhost:8000/api/hr/leaves/${id}`,
         {
           action: "Approved",
-          reviewer: {
-            username: hr.username,
-            role: "HR",
-          },
+          reviewer: { username: hr.username, role: "HR" },
         },
         { withCredentials: true }
       );
@@ -127,10 +126,7 @@ setLeaves(sortedLeaves);
         {
           action: "Rejected",
           reason: rejectionReason,
-          reviewer: {
-            username: hr.username,
-            role: "HR",
-          },
+          reviewer: { username: hr.username, role: "HR" },
         },
         { withCredentials: true }
       );
@@ -145,6 +141,57 @@ setLeaves(sortedLeaves);
     }
   };
 
+  const filteredLeaves = leaves.filter((leave) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      leave.employee?.username?.toLowerCase().includes(query) ||
+      leave.employee?.employeeId?.toLowerCase().includes(query) ||
+      leave.leaveType?.toLowerCase().includes(query) ||
+      leave.status?.toLowerCase().includes(query)
+    );
+  });
+
+  const exportToExcel = () => {
+    const data = filteredLeaves.map((leave) => ({
+      Employee: leave.employee?.username,
+      ID: leave.employee?.employeeId,
+      Type: leave.leaveType,
+      Status: leave.status,
+      Reason: leave.reason,
+      From: new Date(leave.startDate).toLocaleDateString(),
+      To: new Date(leave.endDate).toLocaleDateString(),
+      ReviewedBy: leave.reviewedBy?.username || "Pending",
+      ReviewedAt: leave.reviewedAt ? new Date(leave.reviewedAt).toLocaleString() : "N/A",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leaves");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const file = new Blob([buf], { type: "application/octet-stream" });
+    saveAs(file, "LeaveRequests.xlsx");
+  };
+
+  const exportToPDF = () => {
+  const doc = new jsPDF();
+  const tableData = filteredLeaves.map((leave) => [
+    leave.employee?.username,
+    leave.employee?.employeeId,
+    leave.leaveType,
+    leave.status,
+    leave.reason || "N/A",
+    new Date(leave.startDate).toLocaleDateString(),
+    new Date(leave.endDate).toLocaleDateString(),
+  ]);
+
+  autoTable(doc, {
+    head: [["Name", "ID", "Type", "Status", "Reason", "Start", "End"]],
+    body: tableData,
+  });
+
+  doc.save("LeaveRequests.pdf");
+};
+
+
   if (loading) return <p className="p-6">Loading...</p>;
   if (!hr) return null;
 
@@ -155,11 +202,29 @@ setLeaves(sortedLeaves);
       <div className="p-6 max-w-7xl mx-auto">
         <h2 className="text-2xl font-bold mb-6 text-center text-indigo-700">Manage Leave Requests</h2>
 
-        {leaves.length === 0 ? (
-          <p className="text-center text-gray-600">No leave requests available.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, ID, status, or type..."
+            className="w-full sm:w-1/2 border rounded p-2"
+          />
+          <div className="flex gap-2">
+            <button onClick={exportToExcel} className="bg-green-500 text-white px-4 py-1 rounded hover:bg-green-600">
+              Export Excel
+            </button>
+            <button onClick={exportToPDF} className="bg-red-500 text-white px-4 py-1 rounded hover:bg-red-600">
+              Export PDF
+            </button>
+          </div>
+        </div>
+
+        {filteredLeaves.length === 0 ? (
+          <p className="text-center text-gray-600">No leave requests match your search.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {leaves.map((leave) => {
+            {filteredLeaves.map((leave) => {
               const empLeaves = leavesByEmployee[leave.employee?._id] || {
                 earnedDays: new Set(),
                 sickDays: new Set(),

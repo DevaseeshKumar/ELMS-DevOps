@@ -22,7 +22,7 @@ const Home = () => {
             Simplify Your <span className="text-blue-600">Leave</span> Workflow!
           </h1>
           <p className="text-gray-600 text-lg mb-6">
-            ELMS helps your organization efficiently manage leave requests, approvals, and tracking — all in one place.
+            Leavo helps your organization efficiently manage leave requests, approvals, and tracking — all in one place.
           </p>
           <button
             onClick={handleExplore}

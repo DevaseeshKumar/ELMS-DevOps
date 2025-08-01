@@ -56,7 +56,7 @@ const EmployeeNavbar = () => {
         {/* Left: Logo + Title */}
         <div className="flex items-center gap-2 font-bold text-lg">
           <FaClipboard className="text-white text-2xl" />
-          <span className="hidden sm:inline">ELMS – Employee Panel</span>
+          <span className="hidden sm:inline">Leavo – Employee Panel</span>
         </div>
 
         {/* Center: Navigation with dark background */}

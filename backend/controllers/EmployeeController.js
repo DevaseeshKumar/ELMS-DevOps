@@ -113,20 +113,28 @@ const applyLeave = async (req, res) => {
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 
-  const { startDate, endDate, reason, leaveType } = req.body;
+  const { startDate, endDate, reason, leaveType, latitude, longitude } = req.body;
 
   if (!startDate || !endDate || !reason || !leaveType) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
+    // ✅ Get IP address from request headers or socket
+    const forwarded = req.headers['x-forwarded-for'];
+    const ipAddress = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress;
+
     const leave = new Leave({
-      employee: employeeObjectId, // ✅ Use the actual MongoDB ObjectId
+      employee: employeeObjectId,
       startDate,
       endDate,
       reason,
       leaveType,
       status: "Pending",
+      latitude: latitude || null,
+      longitude: longitude || null,
+      ipAddress: ipAddress || null,
+      // locationName: optional - you can resolve this from coordinates or IP if needed
     });
 
     await leave.save();

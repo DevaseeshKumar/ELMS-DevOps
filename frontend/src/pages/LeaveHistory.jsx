@@ -6,6 +6,8 @@ import EmployeeNavbar from "../components/EmployeeNavbar";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Footer from "../components/Footer";
+import Calendar from "react-calendar";
+import 'react-calendar/dist/Calendar.css';
 
 const LeaveHistory = () => {
   const { employee, loading } = useEmployeeSession();
@@ -187,6 +189,57 @@ const LeaveHistory = () => {
           </div>
         )}
       </div>
+      <div className="bg-white shadow rounded p-6 mt-6 flex justify-center">
+  <div>
+    <h2 className="text-md font-semibold mb-4 text-center">My Leave Calendar</h2>
+    <Calendar 
+      tileClassName={({ date, view }) => {
+        if (view === "month") {
+          const matchedLeave = leaves.find((leave) => {
+            const start = new Date(leave.startDate);
+            const end = new Date(leave.endDate);
+            return (
+              leave.status === "Approved" &&
+              date >= start &&
+              date <= end
+            );
+          });
+
+          if (matchedLeave) {
+            const type = matchedLeave.leaveType.toLowerCase();
+            if (type.includes("earned")) return "!bg-cyan-200 !text-cyan-900 font-semibold text-center rounded";
+            if (type.includes("sick")) return "!bg-purple-200 !text-purple-900 font-semibold text-center rounded";
+            if (type.includes("casual")) return "!bg-orange-200 !text-orange-900 font-semibold text-center rounded";
+            return "!bg-gray-200 !text-gray-900 font-semibold text-center rounded";
+          }
+        }
+        return null;
+      }}
+
+      tileContent={({ date, view }) => {
+        if (view === "month") {
+          const matchedLeave = leaves.find((leave) => {
+            const start = new Date(leave.startDate);
+            const end = new Date(leave.endDate);
+            return (
+              leave.status === "Approved" &&
+              date >= start &&
+              date <= end
+            );
+          });
+
+          return matchedLeave ? (
+            <abbr title={`${matchedLeave.leaveType} Leave`} className="no-underline" />
+          ) : null;
+        }
+      }}
+    />
+  </div>
+</div>
+
+
+
+
       <Footer />
     </div>
   );
