@@ -3,7 +3,7 @@ services:
     build:
       context: ./backend
     ports:
-      - "8000:8000"
+      - "8000:8000"   # fixed for local dev
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -18,7 +18,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "5173:5173"
+      - "5173:5173"   # fixed for local dev
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -33,7 +33,7 @@ services:
     image: mongo:6
     container_name: mongo_mern
     ports:
-      - "27017:27017"
+      - "27017:27017" # fixed for local dev
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
