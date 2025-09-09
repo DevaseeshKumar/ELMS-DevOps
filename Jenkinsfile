@@ -77,6 +77,22 @@ NODE_ENV=production
                 echo '🛡️ Container security scan placeholder (implement Trivy/Clair scan here)'
             }
         }
+
+        stage('Generate Snyk HTML Report') {
+            steps {
+                script {
+                    echo '📄 Generating Snyk HTML report...'
+
+                    // Convert backend JSON to HTML
+                    bat "npx snyk-to-html -i reports\\backend-snyk.json -o reports\\backend-snyk.html || exit /b 0"
+
+                    // Convert frontend JSON to HTML
+                    bat "npx snyk-to-html -i reports\\frontend-snyk.json -o reports\\frontend-snyk.html || exit /b 0"
+
+                    echo '✅ Snyk HTML report generated at reports\\backend-snyk.html and reports\\frontend-snyk.html'
+                }
+            }
+        }
     }
 
     post {
