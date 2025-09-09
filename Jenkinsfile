@@ -26,6 +26,20 @@ NODE_ENV=production
             }
         }
 
+        stage('SAST & Secrets Scan') {
+            steps {
+                sh 'semgrep --config=auto ./backend ./frontend || true'
+                sh 'gitleaks detect --source . || true'
+            }
+        }
+
+        stage('Dependency Scan') {
+            steps {
+                dir('backend') { sh 'npm install && npm audit --json || true' }
+                dir('frontend') { sh 'npm install && npm audit --json || true' }
+            }
+        }
+
         stage('Build & Deploy') {
             steps {
                 script {
@@ -41,6 +55,25 @@ NODE_ENV=production
                         sh upCmd
                     }
                 }
+            }
+        }
+
+        stage('Container Image Scan') {
+            steps {
+                sh 'trivy image ${DOCKER_IMAGE_NAME} || true'
+            }
+        }
+
+        stage('IaC Scan') {
+            steps {
+                sh 'checkov -d . || true'
+            }
+        }
+
+        stage('DAST Scan') {
+            steps {
+                // Assuming app is running after Build & Deploy
+                sh 'zap-cli quick-scan --self-contained --start-options "-config api.disablekey=true" http://localhost:5173 || true'
             }
         }
     }
