@@ -39,12 +39,15 @@ NODE_ENV=production
                 script {
                     def isWindows = !isUnix()
                     if (isWindows) {
+                        bat "mkdir ${REPORT_DIR} || exit 0"
                         bat "cd /d ${BACKEND_DIR} && npm install"
-                        bat "cd /d ${BACKEND_DIR} && snyk test --json > ..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
+                        bat "cd /d ${BACKEND_DIR} && npx snyk test --json > ..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
+                        bat "cd /d ${BACKEND_DIR} && npx eslint . --format json -o ..\\${REPORT_DIR}\\eslint-backend.json || exit /b 0"
                     } else {
                         sh "mkdir -p ${REPORT_DIR}"
                         sh "cd ${BACKEND_DIR} && npm install"
-                        sh "cd ${BACKEND_DIR} && snyk test --json > ../${REPORT_DIR}/backend-snyk.json || true"
+                        sh "cd ${BACKEND_DIR} && npx snyk test --json > ../${REPORT_DIR}/backend-snyk.json || true"
+                        sh "cd ${BACKEND_DIR} && npx eslint . --format json -o ../${REPORT_DIR}/eslint-backend.json || true"
                     }
                 }
             }
@@ -56,10 +59,12 @@ NODE_ENV=production
                     def isWindows = !isUnix()
                     if (isWindows) {
                         bat "cd /d ${FRONTEND_DIR} && npm install"
-                        bat "cd /d ${FRONTEND_DIR} && snyk test --json > ..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
+                        bat "cd /d ${FRONTEND_DIR} && npx snyk test --json > ..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
+                        bat "cd /d ${FRONTEND_DIR} && npx eslint . --format json -o ..\\${REPORT_DIR}\\eslint-frontend.json || exit /b 0"
                     } else {
                         sh "cd ${FRONTEND_DIR} && npm install"
-                        sh "cd ${FRONTEND_DIR} && snyk test --json > ../${REPORT_DIR}/frontend-snyk.json || true"
+                        sh "cd ${FRONTEND_DIR} && npx snyk test --json > ../${REPORT_DIR}/frontend-snyk.json || true"
+                        sh "cd ${FRONTEND_DIR} && npx eslint . --format json -o ../${REPORT_DIR}/eslint-frontend.json || true"
                     }
                 }
             }
@@ -73,21 +78,6 @@ NODE_ENV=production
                         bat "gitleaks detect --source . --report=${REPORT_DIR}\\gitleaks-report.json || exit /b 0"
                     } else {
                         sh "gitleaks detect --source . --report=${REPORT_DIR}/gitleaks-report.json || true"
-                    }
-                }
-            }
-        }
-
-        stage('Static Code Analysis') {
-            steps {
-                script {
-                    def isWindows = !isUnix()
-                    if (isWindows) {
-                        bat "eslint ${BACKEND_DIR} --format json -o ${REPORT_DIR}\\eslint-backend.json || exit /b 0"
-                        bat "eslint ${FRONTEND_DIR} --format json -o ${REPORT_DIR}\\eslint-frontend.json || exit /b 0"
-                    } else {
-                        sh "eslint ${BACKEND_DIR} --format json -o ${REPORT_DIR}/eslint-backend.json || true"
-                        sh "eslint ${FRONTEND_DIR} --format json -o ${REPORT_DIR}/eslint-frontend.json || true"
                     }
                 }
             }
@@ -140,10 +130,13 @@ NODE_ENV=production
         stage('Generate HTML Report') {
             steps {
                 script {
-                    sh """
-                    mkdir -p ${REPORT_DIR}/html
-                    python3 scripts/generate_html_report.py --input ${REPORT_DIR} --output ${REPORT_DIR}/html/report.html
-                    """
+                    def isWindows = !isUnix()
+                    if (isWindows) {
+                        bat "python scripts\\generate_html_report.py --input ${REPORT_DIR} --output ${REPORT_DIR}\\html\\report.html"
+                    } else {
+                        sh "mkdir -p ${REPORT_DIR}/html"
+                        sh "python3 scripts/generate_html_report.py --input ${REPORT_DIR} --output ${REPORT_DIR}/html/report.html"
+                    }
                 }
                 publishHTML([
                     allowMissing: true,
