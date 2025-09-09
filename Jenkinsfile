@@ -48,15 +48,23 @@ NODE_ENV=production
             }
         }
 
-        stage('Secret Scanning') {
+        stage('Generate Snyk HTML Report') {
             steps {
-                echo '🔒 Secret scanning step placeholder (implement your scanning tool here)'
-            }
-        }
+                script {
+                    echo '📄 Generating Snyk HTML report...'
 
-        stage('Static Code Analysis') {
-            steps {
-                echo '📝 Static code analysis step placeholder (implement your linter or SonarQube scan here)'
+                    bat "mkdir ${REPORT_DIR} || exit 0"
+
+                    bat """
+                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
+                    """
+
+                    bat """
+                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
+                    """
+
+                    echo '✅ Snyk HTML report generated at reports\\backend-snyk.html and reports\\frontend-snyk.html'
+                }
             }
         }
 
@@ -77,25 +85,13 @@ NODE_ENV=production
                 echo '🛡️ Container security scan placeholder (implement Trivy/Clair scan here)'
             }
         }
-
-        stage('Generate Snyk HTML Report') {
-            steps {
-                script {
-                    echo '📄 Generating Snyk HTML report...'
-
-                    // Convert backend JSON to HTML
-                    bat "npx snyk-to-html -i reports\\backend-snyk.json -o reports\\backend-snyk.html || exit /b 0"
-
-                    // Convert frontend JSON to HTML
-                    bat "npx snyk-to-html -i reports\\frontend-snyk.json -o reports\\frontend-snyk.html || exit /b 0"
-
-                    echo '✅ Snyk HTML report generated at reports\\backend-snyk.html and reports\\frontend-snyk.html'
-                }
-            }
-        }
     }
 
     post {
+        always {
+            echo '📂 Archiving Snyk HTML reports...'
+            archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
+        }
         failure {
             echo '❌ Pipeline failed. Check Jenkins logs.'
             cleanWs()
