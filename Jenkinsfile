@@ -5,6 +5,7 @@ pipeline {
         DOCKER_IMAGE_NAME = 'elms-app'
         BACKEND_DIR = 'backend'
         FRONTEND_DIR = 'frontend'
+        REPORT_DIR = 'reports'
     }
 
     stages {
@@ -31,14 +32,9 @@ NODE_ENV=production
         stage('Package Scan - Backend') {
             steps {
                 script {
-                    def isWindows = !isUnix()
-                    if (isWindows) {
-                        bat "cd /d ${env.BACKEND_DIR} && npm install"
-                        bat "cd /d ${env.BACKEND_DIR} && npm audit --audit-level=moderate || exit /b 0"
-                    } else {
-                        sh "cd ${env.BACKEND_DIR} && npm install"
-                        sh "cd ${env.BACKEND_DIR} && npm audit --audit-level=moderate || true"
-                    }
+                    bat "mkdir ${REPORT_DIR} || exit 0"
+                    bat "cd /d ${env.BACKEND_DIR} && npm install"
+                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
                 }
             }
         }
@@ -46,14 +42,8 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    def isWindows = !isUnix()
-                    if (isWindows) {
-                        bat "cd /d ${env.FRONTEND_DIR} && npm install"
-                        bat "cd /d ${env.FRONTEND_DIR} && npm audit --audit-level=moderate || exit /b 0"
-                    } else {
-                        sh "cd ${env.FRONTEND_DIR} && npm install"
-                        sh "cd ${env.FRONTEND_DIR} && npm audit --audit-level=moderate || true"
-                    }
+                    bat "cd /d ${env.FRONTEND_DIR} && npm install"
+                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
                 }
             }
         }
@@ -73,17 +63,11 @@ NODE_ENV=production
         stage('Build & Deploy') {
             steps {
                 script {
-                    def isWindows = !isUnix()
                     def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
                     def upCmd = 'docker compose -f docker-compose.yml up --build -d'
 
-                    if (isWindows) {
-                        bat downCmd
-                        bat upCmd
-                    } else {
-                        sh downCmd
-                        sh upCmd
-                    }
+                    bat downCmd
+                    bat upCmd
                 }
             }
         }
