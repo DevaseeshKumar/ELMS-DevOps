@@ -28,31 +28,32 @@ NODE_ENV=production
 
         stage('SAST & Secrets Scan') {
             steps {
-                sh 'semgrep --config=auto ./backend ./frontend || true'
-                sh 'gitleaks detect --source . || true'
+                script {
+                    def sastCmd = 'semgrep --config=auto backend frontend || exit 0'
+                    def secretsCmd = 'gitleaks detect --source . || exit 0'
+
+                    if (isUnix()) {
+                        sh sastCmd
+                        sh secretsCmd
+                    } else {
+                        bat sastCmd
+                        bat secretsCmd
+                    }
+                }
             }
         }
 
         stage('Dependency Scan') {
             steps {
-                dir('backend') { sh 'npm install && npm audit --json || true' }
-                dir('frontend') { sh 'npm install && npm audit --json || true' }
-            }
-        }
-
-        stage('Build & Deploy') {
-            steps {
                 script {
-                    def isWindows = isUnix() == false
-                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
-                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
+                    def depScan = 'npm install && npm audit || exit 0'
 
-                    if (isWindows) {
-                        bat downCmd
-                        bat upCmd
+                    if (isUnix()) {
+                        dir('backend') { sh depScan }
+                        dir('frontend') { sh depScan }
                     } else {
-                        sh downCmd
-                        sh upCmd
+                        dir('backend') { bat depScan }
+                        dir('frontend') { bat depScan }
                     }
                 }
             }
@@ -60,20 +61,60 @@ NODE_ENV=production
 
         stage('Container Image Scan') {
             steps {
-                sh 'trivy image ${DOCKER_IMAGE_NAME} || true'
+                script {
+                    def trivyCmd = "trivy image ${DOCKER_IMAGE_NAME} || exit 0"
+
+                    if (isUnix()) {
+                        sh trivyCmd
+                    } else {
+                        bat trivyCmd
+                    }
+                }
             }
         }
 
         stage('IaC Scan') {
             steps {
-                sh 'checkov -d . || true'
+                script {
+                    def checkovCmd = 'checkov -d . || exit 0'
+
+                    if (isUnix()) {
+                        sh checkovCmd
+                    } else {
+                        bat checkovCmd
+                    }
+                }
             }
         }
 
         stage('DAST Scan') {
             steps {
-                // Assuming app is running after Build & Deploy
-                sh 'zap-cli quick-scan --self-contained --start-options "-config api.disablekey=true" http://localhost:5173 || true'
+                script {
+                    def zapCmd = 'zap-cli quick-scan --self-contained --start-options "-config api.disablekey=true" http://localhost:5173 || exit 0'
+
+                    if (isUnix()) {
+                        sh zapCmd
+                    } else {
+                        bat zapCmd
+                    }
+                }
+            }
+        }
+
+        stage('Build & Deploy') {
+            steps {
+                script {
+                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
+                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
+
+                    if (isUnix()) {
+                        sh downCmd
+                        sh upCmd
+                    } else {
+                        bat downCmd
+                        bat upCmd
+                    }
+                }
             }
         }
     }
