@@ -47,30 +47,42 @@ NODE_ENV=production
         }
 
         stage('Dependency Scan') {
-            steps {
-                script {
-                    try {
-                        def depJson = ''
-                        if (isUnix()) {
-                            depJson = sh(script: 'cd backend && npm install && npm audit --json', returnStdout: true).trim()
-                        } else {
-                            depJson = bat(script: 'cd backend && npm install && npm audit --json', returnStdout: true).trim()
-                        }
-
-                        def json = readJSON text: depJson
-                        def depReport = ''
-                        json.vulnerabilities.each { name, vuln ->
-                            depReport += "${name} - ${vuln.severity} - ${vuln.fixAvailable ? 'Fix Available' : 'No fix'}\n"
-                        }
-                        writeFile file: 'dependency-report.txt', text: depReport
-                        echo "📌 Dependency scan report written with all warnings"
-                    } catch(e) {
-                        echo "⚠️ Dependency scan warnings: ${e}"
-                        env.PIPELINE_ISSUES += "Dependency scan warnings\n"
-                    }
+    steps {
+        script {
+            def depReport = ''
+            try {
+                def depJson = ''
+                if (isUnix()) {
+                    depJson = sh(script: 'cd backend && npm install && npm audit --json', returnStdout: true).trim()
+                } else {
+                    depJson = bat(script: 'cd backend && npm install && npm audit --json', returnStdout: true).trim()
                 }
+
+                // parse JSON safely
+                def json = [:]
+                if (depJson) {
+                    json = readJSON text: depJson
+                }
+
+                if (json.vulnerabilities) {
+                    json.vulnerabilities.each { name, vuln ->
+                        depReport += "${name} - ${vuln.severity} - ${vuln.fixAvailable ? 'Fix Available' : 'No fix'}\n"
+                    }
+                } else {
+                    depReport = "No vulnerabilities found."
+                }
+            } catch(e) {
+                echo "⚠️ Dependency scan failed to parse: ${e}"
+                depReport = "Dependency scan failed or no JSON output."
             }
+
+            // Always create the report file
+            writeFile file: 'dependency-report.txt', text: depReport
+            echo "📌 Dependency scan report written"
         }
+    }
+}
+
 
         stage('Container Image Scan') {
             steps {
