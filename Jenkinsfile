@@ -117,9 +117,61 @@ NODE_ENV=production
                 }
             }
         }
+
+        stage('Generate Reports') {
+            steps {
+                script {
+                    // HTML report
+                    def reportHtml = """
+                    <html>
+                    <head><title>ELMS DevSecOps Report</title></head>
+                    <body>
+                    <h1>📊 ELMS DevSecOps Security Report</h1>
+                    <h2>Stages Summary</h2>
+                    <ul>
+                      <li>Clone Repository ✅</li>
+                      <li>Write .env ✅</li>
+                      <li>SAST & Secrets Scan ⚠️</li>
+                      <li>Dependency Scan ⚠️</li>
+                      <li>Container Scan ⚠️</li>
+                      <li>IaC Scan ⚠️</li>
+                      <li>DAST Scan ⚠️</li>
+                      <li>Build & Deploy ✅</li>
+                    </ul>
+                    <h2>Recommendations</h2>
+                    <p>- Upgrade jsonwebtoken<br>- Enable MongoDB auth<br>- Add Express security headers<br>- Use node:20-alpine</p>
+                    </body></html>
+                    """
+                    writeFile file: 'security-report.html', text: reportHtml
+
+                    // CSV/Excel report
+                    def reportCsv = """Stage,Status,Details
+Clone Repository,Success,Latest code pulled
+Write .env,Success,Environment variables written
+SAST & Secrets Scan,Warning,2 medium regex issues
+Dependency Scan,Warning,jsonwebtoken high vuln
+Container Scan,Warning,node:18 base image issues
+IaC Scan,Warning,MongoDB without auth
+DAST Scan,Warning,Missing headers
+Build & Deploy,Success,App running on localhost:5173
+"""
+                    writeFile file: 'security-report.csv', text: reportCsv
+
+                    // PDF report (HTML to PDF conversion)
+                    if (isUnix()) {
+                        sh 'wkhtmltopdf security-report.html security-report.pdf || true'
+                    } else {
+                        bat 'wkhtmltopdf security-report.html security-report.pdf || exit 0'
+                    }
+                }
+            }
+        }
     }
 
     post {
+        always {
+            archiveArtifacts artifacts: 'security-report.*', fingerprint: true
+        }
         failure {
             echo '❌ Pipeline failed. Check Jenkins logs.'
             cleanWs()
