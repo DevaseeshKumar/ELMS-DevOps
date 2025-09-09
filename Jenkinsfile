@@ -28,24 +28,25 @@ NODE_ENV=production
             }
         }
 
-        // 3️⃣ Package Scan (Dependency + Outdated)
         stage('Package Scan') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh 'npm install'
-                        sh 'npm audit --audit-level=moderate'
-                        sh 'npm outdated || true'
-                        sh 'npx snyk test || true'
-                    } else {
-                        bat 'npm install'
-                        bat 'npm audit --audit-level=moderate'
-                        bat 'npm outdated || exit /b 0'
-                        bat 'npx snyk test || exit /b 0'
-                    }
-                }
+    steps {
+        script {
+            def pkgDir = 'backend' // change to your actual folder containing package.json
+            if (isUnix()) {
+                sh "cd ${pkgDir} && npm install"
+                sh "cd ${pkgDir} && npm audit --audit-level=moderate"
+                sh "cd ${pkgDir} && npm outdated || true"
+                sh "cd ${pkgDir} && npx snyk test || true"
+            } else {
+                bat "cd /d ${pkgDir} && npm install"
+                bat "cd /d ${pkgDir} && npm audit --audit-level=moderate"
+                bat "cd /d ${pkgDir} && npm outdated || exit /b 0"
+                bat "cd /d ${pkgDir} && npx snyk test || exit /b 0"
             }
         }
+    }
+}
+
 
         // 4️⃣ Secret Scanning
         stage('Secret Scanning') {
