@@ -3,16 +3,17 @@ pipeline {
 
     environment {
         DOCKER_IMAGE_NAME = 'elms-app'
-        PIPELINE_ISSUES = ""   // initialize empty
     }
 
     stages {
+        // 1️⃣ Clone Repo
         stage('Clone Repository') {
             steps {
                 git credentialsId: 'your-github-credentials-id', url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git', branch: 'main'
             }
         }
 
+        // 2️⃣ Write .env securely
         stage('Write .env') {
             steps {
                 writeFile file: '.env', text: '''\
@@ -27,162 +28,83 @@ NODE_ENV=production
             }
         }
 
-        stage('SAST & Secrets Scan') {
+        // 3️⃣ Package Scan (Dependency + Outdated Check)
+        stage('Package Scan') {
             steps {
-                script {
-                    try {
-                        if (isUnix()) {
-                            sh 'semgrep --config=auto backend frontend || true'
-                            sh 'gitleaks detect --source . || true'
-                        } else {
-                            bat 'powershell -Command "Try { semgrep --config=auto backend frontend } Catch {} ; exit 0"'
-                            bat 'powershell -Command "Try { gitleaks detect --source . } Catch {} ; exit 0"'
-                        }
-                    } catch(e) {
-                        echo "⚠️ SAST/Secrets scan warnings: ${e}"
-                        env.PIPELINE_ISSUES += "SAST/Secrets scan warnings\n"
-                    }
-                }
+                sh 'npm install'
+                echo '🔍 Scanning packages for vulnerabilities...'
+                sh 'npm audit --audit-level=moderate'
+                sh 'echo "Checking for outdated packages..."'
+                sh 'npm outdated || true'
+                sh 'echo "Running Snyk security scan..."'
+                sh 'npx snyk test || true'
             }
         }
 
-        stage('Dependency Scan') {
+        // 4️⃣ Secret Scanning
+        stage('Secret Scanning') {
             steps {
-                script {
-                    def depReport = ''
-                    try {
-                        def depJson = ''
-                        if (isUnix()) {
-                            depJson = sh(script: 'cd backend && npm install && npm audit --json || true', returnStdout: true).trim()
-                        } else {
-                            depJson = bat(script: 'cd backend && npm install && npm audit --json', returnStdout: true).trim()
-                        }
-
-                        def json = [:]
-                        if (depJson && depJson.contains("{")) {
-                            json = readJSON text: depJson
-                        }
-
-                        if (json.vulnerabilities) {
-                            json.vulnerabilities.each { name, vuln ->
-                                depReport += "${name} - ${vuln.severity} - ${vuln.fixAvailable ? 'Fix Available' : 'No fix'}\n"
-                            }
-                        } else {
-                            depReport = "No vulnerabilities found."
-                        }
-                    } catch(e) {
-                        echo "⚠️ Dependency scan failed: ${e}"
-                        depReport = "Dependency scan failed or no JSON output."
-                        env.PIPELINE_ISSUES += "Dependency scan warnings\n"
-                    }
-
-                    writeFile file: 'dependency-report.txt', text: depReport
-                    echo "📌 Dependency scan report written"
-                }
+                sh 'npx gitleaks detect --source=. --no-git'
             }
         }
 
-        stage('Container Image Scan') {
+        // 5️⃣ Static Code Analysis (SAST)
+        stage('Static Code Analysis') {
             steps {
-                script {
-                    try {
-                        def cmd = isUnix() ? "trivy image ${DOCKER_IMAGE_NAME} || true" : 'powershell -Command "Try { trivy image ${env.DOCKER_IMAGE_NAME} } Catch {} ; exit 0"'
-                        if (isUnix()) sh cmd else bat cmd
-                    } catch(e) {
-                        echo "⚠️ Container scan warnings: ${e}"
-                        env.PIPELINE_ISSUES += "Container scan warnings\n"
-                    }
-                }
+                sh 'npx eslint . --ext .js,.jsx --max-warnings=0 || true'
+                sh 'npx semgrep --config=auto .'
             }
         }
 
-        stage('IaC Scan') {
+        // 6️⃣ Build Docker Image
+        stage('Build Docker Image') {
             steps {
-                script {
-                    try {
-                        def cmd = isUnix() ? 'checkov -d . || true' : 'powershell -Command "Try { checkov -d . } Catch {} ; exit 0"'
-                        if (isUnix()) sh cmd else bat cmd
-                    } catch(e) {
-                        echo "⚠️ IaC scan warnings: ${e}"
-                        env.PIPELINE_ISSUES += "IaC scan warnings\n"
-                    }
-                }
+                sh "docker build -t ${DOCKER_IMAGE_NAME}:latest ."
             }
         }
 
-        stage('DAST Scan') {
+        // 7️⃣ Container Security Scan
+        stage('Container Security Scan') {
             steps {
-                script {
-                    try {
-                        def cmd = isUnix() ? 'zap-cli quick-scan --self-contained --start-options "-config api.disablekey=true" http://localhost:5173 || true' :
-                                             'powershell -Command "Try { zap-cli quick-scan --self-contained --start-options \\"-config api.disablekey=true\\" http://localhost:5173 } Catch {} ; exit 0"'
-                        if (isUnix()) sh cmd else bat cmd
-                    } catch(e) {
-                        echo "⚠️ DAST scan warnings: ${e}"
-                        env.PIPELINE_ISSUES += "DAST scan warnings\n"
-                    }
-                }
+                sh "trivy image ${DOCKER_IMAGE_NAME}:latest"
+                sh 'docker scan ${DOCKER_IMAGE_NAME}:latest || true'
             }
         }
 
-        stage('Build & Deploy') {
+        // 8️⃣ Deploy using Docker Compose
+        stage('Deploy') {
             steps {
                 script {
-                    try {
-                        if (isUnix()) {
-                            sh 'docker compose -f docker-compose.yml down || true'
-                            sh 'docker compose -f docker-compose.yml up --build -d || true'
-                        } else {
-                            bat 'docker compose -f docker-compose.yml down || exit 0'
-                            bat 'docker compose -f docker-compose.yml up --build -d || exit 0'
-                        }
-                    } catch(e) {
-                        echo "⚠️ Build & deploy warnings: ${e}"
-                        env.PIPELINE_ISSUES += "Build & deploy warnings\n"
-                    }
-                }
-            }
-        }
+                    def isWindows = isUnix() == false
+                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
+                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
 
-        stage('Generate Consolidated Report') {
-            steps {
-                script {
-                    def depText = ''
-                    try {
-                        depText = readFile('dependency-report.txt')
-                    } catch(e) {
-                        depText = "Dependency report not available."
-                    }
-
-                    def reportHtml = """
-                    <html>
-                    <head><title>ELMS DevSecOps Report</title></head>
-                    <body>
-                    <h1>📊 ELMS DevSecOps Security Report</h1>
-                    <h2>Pipeline Issues & Warnings</h2>
-                    <pre>${env.PIPELINE_ISSUES ?: 'No warnings'}</pre>
-                    <h2>Dependency Scan Report</h2>
-                    <pre>${depText}</pre>
-                    </body>
-                    </html>
-                    """
-                    writeFile file: 'elms-devsecops-report.html', text: reportHtml
-
-                    // Convert HTML to PDF (optional)
-                    if (isUnix()) {
-                        sh 'wkhtmltopdf elms-devsecops-report.html elms-devsecops-report.pdf || true'
+                    if (isWindows) {
+                        bat downCmd
+                        bat upCmd
                     } else {
-                        bat 'powershell -Command "Try { & wkhtmltopdf elms-devsecops-report.html elms-devsecops-report.pdf } Catch { Write-Host \'PDF not generated\' } ; exit 0"'
+                        sh downCmd
+                        sh upCmd
                     }
                 }
+            }
+        }
+
+        // 9️⃣ Post Deployment Monitoring (Optional)
+        stage('Post Deployment Checks') {
+            steps {
+                echo '✅ Deployment finished. Integrate Prometheus, Grafana, or Falco for runtime monitoring.'
             }
         }
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: 'elms-devsecops-report.*', fingerprint: true
-            echo "✅ Pipeline completed. Check reports for all warnings."
+        failure {
+            echo '❌ Pipeline failed. Check Jenkins logs.'
+            cleanWs()
+        }
+        success {
+            echo '🚀 Pipeline completed successfully!'
         }
     }
 }
