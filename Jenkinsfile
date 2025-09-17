@@ -43,8 +43,8 @@ pipeline {
         stage('Generate Reports') {
             steps {
                 script {
-                    // Instead of publishHTML, we fail if reports need publishing
-                    error("Pipeline stopped: HTML publishing not supported (publishHTML plugin missing).")
+                    // Fail pipeline instead of trying to publish reports
+                    error("Pipeline stopped: HTML report publishing not supported (publishHTML plugin missing).")
                 }
             }
         }
