@@ -9,9 +9,11 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout Code') {
             steps {
-                git branch: 'collab', url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git'
+                git branch: 'collab',
+                    credentialsId: 'your-github-credentials-id',
+                    url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git'
             }
         }
 
@@ -29,11 +31,13 @@ NODE_ENV=production
             }
         }
 
-        stage('Install Backend') {
+        stage('Build Backend') {
             steps {
                 dir("${BACKEND_DIR}") {
                     bat "npm install"
-                    echo "⚡ Backend ready to run with: nodemon server.js"
+                    echo "⚡ Starting backend with nodemon..."
+                    // Start backend (non-blocking) - use '&' for Windows
+                    bat "start /B npx nodemon server.js"
                 }
             }
         }
@@ -79,12 +83,12 @@ NODE_ENV=production
                     npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
                     """
 
-                    echo '✅ Reports generated in reports/ folder'
+                    echo '✅ Snyk HTML reports generated.'
                 }
             }
         }
 
-        stage('Build & Deploy') {
+        stage('Build & Deploy Containers') {
             steps {
                 script {
                     def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
@@ -109,7 +113,17 @@ NODE_ENV=production
             archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
         }
         failure {
-            echo '❌ Pipeline failed due to errors or high vulnerabilities.'
+            script {
+                echo '❌ Pipeline failed. Generating failure report...'
+
+                bat "mkdir ${REPORT_DIR} || exit 0"
+
+                def failureMessage = "Pipeline failed at stage: ${env.STAGE_NAME}\n" +
+                                     "Check Jenkins console logs for details."
+                writeFile file: "${REPORT_DIR}/failure-report.txt", text: failureMessage
+
+                archiveArtifacts artifacts: "${REPORT_DIR}/failure-report.txt", allowEmptyArchive: true
+            }
             cleanWs()
         }
         success {
