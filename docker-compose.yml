@@ -18,7 +18,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "0:5173"   # random free host port → container:5173
+      - "5173:5173"   # random free host port → container:5173
     volumes:
       - ./frontend:/app
       - /app/node_modules
