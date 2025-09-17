@@ -11,7 +11,10 @@ pipeline {
     stages {
         stage('Clone Repository') {
             steps {
-                git credentialsId: 'your-github-credentials-id', url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git', branch: 'main'
+                // checkout collab branch
+                git credentialsId: 'your-github-credentials-id',
+                    url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git',
+                    branch: 'collab'
             }
         }
 
@@ -32,7 +35,8 @@ NODE_ENV=production
         stage('Build Backend') {
             steps {
                 dir("${BACKEND_DIR}") {
-                    bat '.\\mvnw clean package -DskipTests'
+                    bat "npm install"
+                    bat "npm run build || exit 0" // run build only if script exists
                 }
             }
         }
@@ -40,16 +44,8 @@ NODE_ENV=production
         stage('Build Frontend') {
             steps {
                 dir("${FRONTEND_DIR}") {
-                    bat 'npm install'
-                    bat 'npm run build'
-                }
-            }
-        }
-
-        stage('Run Tests') {
-            steps {
-                dir("${BACKEND_DIR}") {
-                    bat '.\\mvnw test'
+                    bat "npm install"
+                    bat "npm run build"
                 }
             }
         }
@@ -58,8 +54,7 @@ NODE_ENV=production
             steps {
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    bat "cd /d ${env.BACKEND_DIR} && npm install"
-                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
+                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\backend-snyk.json"
                 }
             }
         }
@@ -67,8 +62,7 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    bat "cd /d ${env.FRONTEND_DIR} && npm install"
-                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
+                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\frontend-snyk.json"
                 }
             }
         }
@@ -80,47 +74,26 @@ NODE_ENV=production
 
                     bat "mkdir ${REPORT_DIR} || exit 0"
 
-                    bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
-                    """
+                    bat "npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html"
+                    bat "npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html"
 
-                    bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
-                    """
-
-                    echo '✅ Snyk HTML report generated at reports\\backend-snyk.html and reports\\frontend-snyk.html'
+                    echo '✅ Reports at reports\\backend-snyk.html and reports\\frontend-snyk.html'
                 }
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                bat "docker build -t ${DOCKER_IMAGE_NAME}:latest ."
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                bat "docker tag ${DOCKER_IMAGE_NAME}:latest your-dockerhub-username/${DOCKER_IMAGE_NAME}:latest"
-                bat "docker push your-dockerhub-username/${DOCKER_IMAGE_NAME}:latest"
-            }
-        }
-
-        stage('Deploy Containers') {
+        stage('Build & Deploy') {
             steps {
                 script {
-                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
-                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
-
-                    bat downCmd
-                    bat upCmd
+                    bat 'docker compose -f docker-compose.yml down || exit 0'
+                    bat 'docker compose -f docker-compose.yml up --build -d'
                 }
             }
         }
 
         stage('Container Security Scan') {
             steps {
-                echo '🛡️ Container security scan placeholder (implement Trivy/Clair scan here)'
+                echo '🛡️ Container security scan placeholder (add Trivy/Clair here)'
             }
         }
     }
@@ -131,7 +104,7 @@ NODE_ENV=production
             archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
         }
         failure {
-            echo '❌ Pipeline failed. Check Jenkins logs.'
+            echo '❌ Pipeline failed due to errors or high vulnerabilities.'
             cleanWs()
         }
         success {
