@@ -54,12 +54,10 @@ NODE_ENV=production
             steps {
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    // Run Snyk and save JSON report
-                    def snykCmd = "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\backend-snyk.json"
-                    bat snykCmd
-                    // Check if vulnerabilities exist
-                    def report = readFile("${REPORT_DIR}\\backend-snyk.json")
-                    if (report.contains('"vulnerabilities":{') && !report.contains('"vulnerabilities":{}')) {
+                    def backendSnyk = bat(returnStdout: true, script: "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json")
+                    writeFile file: "${REPORT_DIR}/backend-snyk.json", text: backendSnyk
+
+                    if (backendSnyk.contains('"vulnerabilities":{') && !backendSnyk.contains('"vulnerabilities":{}')) {
                         error "❌ High vulnerabilities found in backend packages!"
                     }
                 }
@@ -69,10 +67,10 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    def snykCmd = "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\frontend-snyk.json"
-                    bat snykCmd
-                    def report = readFile("${REPORT_DIR}\\frontend-snyk.json")
-                    if (report.contains('"vulnerabilities":{') && !report.contains('"vulnerabilities":{}')) {
+                    def frontendSnyk = bat(returnStdout: true, script: "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json")
+                    writeFile file: "${REPORT_DIR}/frontend-snyk.json", text: frontendSnyk
+
+                    if (frontendSnyk.contains('"vulnerabilities":{') && !frontendSnyk.contains('"vulnerabilities":{}')) {
                         error "❌ High vulnerabilities found in frontend packages!"
                     }
                 }
@@ -116,10 +114,29 @@ NODE_ENV=production
         }
         failure {
             script {
-                echo '❌ Pipeline failed. Generating failure report...'
+                echo '❌ Pipeline failed. Capturing full logs...'
+
                 bat "mkdir ${REPORT_DIR} || exit 0"
-                def failureMessage = "Pipeline failed at stage: ${env.STAGE_NAME}\nCheck Jenkins console logs for details.\nRefer to Snyk reports for vulnerabilities."
-                writeFile file: "${REPORT_DIR}/failure-report.txt", text: failureMessage
+
+                // Capture full console logs
+                def consoleLogs = currentBuild.rawBuild.getLog(2000).join('\n')
+                def backendReport = readFile("${REPORT_DIR}/backend-snyk.json")
+                def frontendReport = readFile("${REPORT_DIR}/frontend-snyk.json")
+
+                def failureReport = """
+Pipeline failed at stage: ${env.STAGE_NAME}
+
+=== Jenkins Console Logs ===
+${consoleLogs}
+
+=== Backend Snyk Scan ===
+${backendReport}
+
+=== Frontend Snyk Scan ===
+${frontendReport}
+"""
+
+                writeFile file: "${REPORT_DIR}/failure-report.txt", text: failureReport
                 archiveArtifacts artifacts: "${REPORT_DIR}/failure-report.txt", allowEmptyArchive: true
             }
             cleanWs()
