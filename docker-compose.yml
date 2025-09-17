@@ -3,7 +3,7 @@ services:
     build:
       context: ./backend
     ports:
-      - "0:8000"   # random free host port → container:8000
+      - "8000:8000"   # random free host port → container:8000
     volumes:
       - ./backend:/app
       - /app/node_modules
