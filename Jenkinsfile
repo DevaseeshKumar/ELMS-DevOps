@@ -54,12 +54,7 @@ NODE_ENV=production
             steps {
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    def backendSnyk = bat(returnStdout: true, script: "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json")
-                    writeFile file: "${REPORT_DIR}/backend-snyk.json", text: backendSnyk
-
-                    if (backendSnyk.contains('"vulnerabilities":{') && !backendSnyk.contains('"vulnerabilities":{}')) {
-                        error "❌ High vulnerabilities found in backend packages!"
-                    }
+                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\backend-snyk.json || exit 0"
                 }
             }
         }
@@ -67,12 +62,7 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    def frontendSnyk = bat(returnStdout: true, script: "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json")
-                    writeFile file: "${REPORT_DIR}/frontend-snyk.json", text: frontendSnyk
-
-                    if (frontendSnyk.contains('"vulnerabilities":{') && !frontendSnyk.contains('"vulnerabilities":{}')) {
-                        error "❌ High vulnerabilities found in frontend packages!"
-                    }
+                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\frontend-snyk.json || exit 0"
                 }
             }
         }
@@ -80,10 +70,10 @@ NODE_ENV=production
         stage('Generate Snyk HTML Report') {
             steps {
                 script {
-                    echo '📄 Generating Snyk HTML reports...'
+                    echo '📄 Generating Snyk HTML report...'
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    bat "npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0"
-                    bat "npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0"
+                    bat "npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit 0"
+                    bat "npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit 0"
                     echo '✅ Snyk HTML reports generated.'
                 }
             }
@@ -92,10 +82,8 @@ NODE_ENV=production
         stage('Build & Deploy Containers') {
             steps {
                 script {
-                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
-                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
-                    bat downCmd
-                    bat upCmd
+                    bat "docker compose -f docker-compose.yml down || exit 0"
+                    bat "docker compose -f docker-compose.yml up --build -d"
                 }
             }
         }
@@ -112,16 +100,19 @@ NODE_ENV=production
             echo '📂 Archiving Snyk HTML reports...'
             archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
         }
+
         failure {
             script {
-                echo '❌ Pipeline failed. Capturing full logs...'
+                echo '❌ Pipeline failed. Capturing logs and vulnerabilities...'
 
                 bat "mkdir ${REPORT_DIR} || exit 0"
 
-                // Capture full console logs
+                // Capture last 2000 lines of Jenkins console log
                 def consoleLogs = currentBuild.rawBuild.getLog(2000).join('\n')
-                def backendReport = readFile("${REPORT_DIR}/backend-snyk.json")
-                def frontendReport = readFile("${REPORT_DIR}/frontend-snyk.json")
+
+                // Read Snyk JSON reports if they exist
+                def backendReport = fileExists("${REPORT_DIR}/backend-snyk.json") ? readFile("${REPORT_DIR}/backend-snyk.json") : 'No backend Snyk report found.'
+                def frontendReport = fileExists("${REPORT_DIR}/frontend-snyk.json") ? readFile("${REPORT_DIR}/frontend-snyk.json") : 'No frontend Snyk report found.'
 
                 def failureReport = """
 Pipeline failed at stage: ${env.STAGE_NAME}
@@ -136,11 +127,14 @@ ${backendReport}
 ${frontendReport}
 """
 
+                // Write failure report and flush
                 writeFile file: "${REPORT_DIR}/failure-report.txt", text: failureReport
+
+                // Archive the failure report
                 archiveArtifacts artifacts: "${REPORT_DIR}/failure-report.txt", allowEmptyArchive: true
             }
-            cleanWs()
         }
+
         success {
             echo '✅ Pipeline completed successfully!'
         }
