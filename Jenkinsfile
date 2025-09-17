@@ -34,7 +34,9 @@ NODE_ENV=production
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
                     bat "cd /d ${env.BACKEND_DIR} && npm install"
-                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\backend-snyk.json"
+                    }
                 }
             }
         }
@@ -43,7 +45,9 @@ NODE_ENV=production
             steps {
                 script {
                     bat "cd /d ${env.FRONTEND_DIR} && npm install"
-                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --json 1>..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\frontend-snyk.json"
+                    }
                 }
             }
         }
@@ -51,24 +55,40 @@ NODE_ENV=production
         stage('Generate Snyk HTML Report') {
             steps {
                 script {
-                    echo '📄 Generating Snyk HTML report...'
-
+                    echo '📄 Generating Snyk HTML reports...'
                     bat "mkdir ${REPORT_DIR} || exit 0"
 
                     bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
+                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || echo "No backend report"
                     """
 
                     bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
+                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || echo "No frontend report"
                     """
 
-                    echo '✅ Snyk HTML report generated at reports\\backend-snyk.html and reports\\frontend-snyk.html'
+                    // Create a summary HTML
+                    writeFile file: "${REPORT_DIR}/scan-summary.html", text: """
+                    <html>
+                        <head><title>Snyk Scan Summary</title></head>
+                        <body>
+                            <h2>Snyk Security Scan Summary</h2>
+                            <ul>
+                                <li><a href="backend-snyk.html">Backend Report</a></li>
+                                <li><a href="frontend-snyk.html">Frontend Report</a></li>
+                            </ul>
+                            <p><b>Note:</b> If this pipeline failed, it means one or more 
+                            <span style="color:red">High/Critical</span> vulnerabilities were detected.</p>
+                        </body>
+                    </html>
+                    """
                 }
             }
         }
 
         stage('Build & Deploy') {
+            when {
+                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
+            }
             steps {
                 script {
                     def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
@@ -82,7 +102,7 @@ NODE_ENV=production
 
         stage('Container Security Scan') {
             steps {
-                echo '🛡️ Container security scan placeholder (implement Trivy/Clair scan here)'
+                echo '🛡️ Container security scan placeholder (implement Trivy/Clair here)'
             }
         }
     }
@@ -91,10 +111,37 @@ NODE_ENV=production
         always {
             echo '📂 Archiving Snyk HTML reports...'
             archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
+
+            // ✅ Publish all reports as tabs in Jenkins UI
+            publishHTML(target: [
+                reportName: 'Snyk Summary',
+                reportDir: "${REPORT_DIR}",
+                reportFiles: 'scan-summary.html',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            publishHTML(target: [
+                reportName: 'Backend Snyk Report',
+                reportDir: "${REPORT_DIR}",
+                reportFiles: 'backend-snyk.html',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
+
+            publishHTML(target: [
+                reportName: 'Frontend Snyk Report',
+                reportDir: "${REPORT_DIR}",
+                reportFiles: 'frontend-snyk.html',
+                keepAll: true,
+                alwaysLinkToLastBuild: true,
+                allowMissing: true
+            ])
         }
         failure {
-            echo '❌ Pipeline failed. Check Jenkins logs.'
-            cleanWs()
+            echo '❌ Pipeline failed due to high severity vulnerabilities. Check HTML reports.'
         }
         success {
             echo '✅ Pipeline completed successfully!'
