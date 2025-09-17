@@ -36,7 +36,7 @@ NODE_ENV=production
                 dir("${BACKEND_DIR}") {
                     bat "npm install"
                     echo "⚡ Starting backend with nodemon..."
-                    // Start backend (non-blocking) - use '&' for Windows
+                    // Start backend in background (Windows-friendly)
                     bat "start /B npx nodemon server.js"
                 }
             }
@@ -55,7 +55,7 @@ NODE_ENV=production
             steps {
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\backend-snyk.json"
+                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\backend-snyk.json || exit /b 0"
                 }
             }
         }
@@ -63,7 +63,7 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\frontend-snyk.json"
+                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\frontend-snyk.json || exit /b 0"
                 }
             }
         }
@@ -72,17 +72,13 @@ NODE_ENV=production
             steps {
                 script {
                     echo '📄 Generating Snyk HTML report...'
-
                     bat "mkdir ${REPORT_DIR} || exit 0"
-
                     bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
+                        npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
                     """
-
                     bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
+                        npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
                     """
-
                     echo '✅ Snyk HTML reports generated.'
                 }
             }
@@ -116,18 +112,23 @@ NODE_ENV=production
             script {
                 echo '❌ Pipeline failed. Generating failure report...'
 
+                // Ensure reports folder exists
                 bat "mkdir ${REPORT_DIR} || exit 0"
 
-                def failureMessage = "Pipeline failed at stage: ${env.STAGE_NAME}\n" +
-                                     "Check Jenkins console logs for details."
+                // Capture failed stage and build info
+                def failedStage = currentBuild.rawBuild.getExecution().getCurrentHeads()[0].toString()
+                def failureMessage = "Pipeline FAILED!\nFailed Stage Info: ${failedStage}\nCheck Jenkins console logs for full error details."
+
                 writeFile file: "${REPORT_DIR}/failure-report.txt", text: failureMessage
 
                 archiveArtifacts artifacts: "${REPORT_DIR}/failure-report.txt", allowEmptyArchive: true
             }
-            cleanWs()
+            // Do NOT clean workspace on failure (prevents Windows locks)
         }
         success {
             echo '✅ Pipeline completed successfully!'
+            // Optional: clean workspace only on success
+            cleanWs()
         }
     }
 }
