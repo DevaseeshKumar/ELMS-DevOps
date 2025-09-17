@@ -11,10 +11,7 @@ pipeline {
     stages {
         stage('Clone Repository') {
             steps {
-                // checkout collab branch
-                git credentialsId: 'your-github-credentials-id',
-                    url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git',
-                    branch: 'collab'
+                git branch: 'collab', url: 'https://github.com/DevaseeshKumar/ELMS-DevOps.git'
             }
         }
 
@@ -32,11 +29,11 @@ NODE_ENV=production
             }
         }
 
-        stage('Build Backend') {
+        stage('Install Backend') {
             steps {
                 dir("${BACKEND_DIR}") {
                     bat "npm install"
-                    bat "npm run build || exit 0" // run build only if script exists
+                    echo "⚡ Backend ready to run with: nodemon server.js"
                 }
             }
         }
@@ -54,7 +51,7 @@ NODE_ENV=production
             steps {
                 script {
                     bat "mkdir ${REPORT_DIR} || exit 0"
-                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\backend-snyk.json"
+                    bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\backend-snyk.json"
                 }
             }
         }
@@ -62,7 +59,7 @@ NODE_ENV=production
         stage('Package Scan - Frontend') {
             steps {
                 script {
-                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\frontend-snyk.json"
+                    bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json 1>..\\${REPORT_DIR}\\frontend-snyk.json"
                 }
             }
         }
@@ -74,10 +71,15 @@ NODE_ENV=production
 
                     bat "mkdir ${REPORT_DIR} || exit 0"
 
-                    bat "npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html"
-                    bat "npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html"
+                    bat """
+                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || exit /b 0
+                    """
 
-                    echo '✅ Reports at reports\\backend-snyk.html and reports\\frontend-snyk.html'
+                    bat """
+                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || exit /b 0
+                    """
+
+                    echo '✅ Reports generated in reports/ folder'
                 }
             }
         }
@@ -85,15 +87,18 @@ NODE_ENV=production
         stage('Build & Deploy') {
             steps {
                 script {
-                    bat 'docker compose -f docker-compose.yml down || exit 0'
-                    bat 'docker compose -f docker-compose.yml up --build -d'
+                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
+                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
+
+                    bat downCmd
+                    bat upCmd
                 }
             }
         }
 
         stage('Container Security Scan') {
             steps {
-                echo '🛡️ Container security scan placeholder (add Trivy/Clair here)'
+                echo '🛡️ Container security scan placeholder (implement Trivy/Clair here)'
             }
         }
     }
