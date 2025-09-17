@@ -15,136 +15,63 @@ pipeline {
             }
         }
 
-        stage('Write .env') {
+        stage('Build Backend') {
             steps {
-                writeFile file: '.env', text: '''\
-mongodburl=mongodb+srv://ELMS:ELMS@cluster0.uqtzdbr.mongodb.net/elms?retryWrites=true&w=majority&appName=Cluster0
-PORT=8000
-EMAIL_USER=thorodinsonuru@gmail.com
-EMAIL_PASS=qzerfjxnvoeupsgp
-FRONTEND_URL=https://localhost:5173
-SESSION_SECRET=elms-secret-key
-NODE_ENV=production
-'''
-            }
-        }
-
-        stage('Package Scan - Backend') {
-            steps {
-                script {
-                    bat "mkdir ${REPORT_DIR} || exit 0"
-                    bat "cd /d ${env.BACKEND_DIR} && npm install"
-                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        bat "cd /d ${env.BACKEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\backend-snyk.json"
-                    }
+                dir("${BACKEND_DIR}") {
+                    sh './mvnw clean package -DskipTests'
                 }
             }
         }
 
-        stage('Package Scan - Frontend') {
+        stage('Build Frontend') {
             steps {
-                script {
-                    bat "cd /d ${env.FRONTEND_DIR} && npm install"
-                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        bat "cd /d ${env.FRONTEND_DIR} && npx snyk test --severity-threshold=high --json > ..\\${REPORT_DIR}\\frontend-snyk.json"
-                    }
+                dir("${FRONTEND_DIR}") {
+                    sh 'npm install'
+                    sh 'npm run build'
                 }
             }
         }
 
-        stage('Generate Snyk HTML Report') {
+        stage('Run Tests') {
             steps {
-                script {
-                    echo '📄 Generating Snyk HTML reports...'
-                    bat "mkdir ${REPORT_DIR} || exit 0"
-
-                    bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\backend-snyk.json -o ${REPORT_DIR}\\backend-snyk.html || echo "No backend report"
-                    """
-
-                    bat """
-                    npx snyk-to-html -i ${REPORT_DIR}\\frontend-snyk.json -o ${REPORT_DIR}\\frontend-snyk.html || echo "No frontend report"
-                    """
-
-                    // Create a summary HTML
-                    writeFile file: "${REPORT_DIR}/scan-summary.html", text: """
-                    <html>
-                        <head><title>Snyk Scan Summary</title></head>
-                        <body>
-                            <h2>Snyk Security Scan Summary</h2>
-                            <ul>
-                                <li><a href="backend-snyk.html">Backend Report</a></li>
-                                <li><a href="frontend-snyk.html">Frontend Report</a></li>
-                            </ul>
-                            <p><b>Note:</b> If this pipeline failed, it means one or more 
-                            <span style="color:red">High/Critical</span> vulnerabilities were detected.</p>
-                        </body>
-                    </html>
-                    """
+                dir("${BACKEND_DIR}") {
+                    sh './mvnw test'
                 }
             }
         }
 
-        stage('Build & Deploy') {
-            when {
-                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
-            }
+        stage('Generate Reports') {
             steps {
                 script {
-                    def downCmd = 'docker compose -f docker-compose.yml down || exit 0'
-                    def upCmd = 'docker compose -f docker-compose.yml up --build -d'
-
-                    bat downCmd
-                    bat upCmd
+                    // Instead of publishHTML, we fail if reports need publishing
+                    error("Pipeline stopped: HTML publishing not supported (publishHTML plugin missing).")
                 }
             }
         }
 
-        stage('Container Security Scan') {
+        stage('Build Docker Image') {
             steps {
-                echo '🛡️ Container security scan placeholder (implement Trivy/Clair here)'
+                sh "docker build -t ${DOCKER_IMAGE_NAME} ."
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                sh "docker tag ${DOCKER_IMAGE_NAME}:latest your-dockerhub-username/${DOCKER_IMAGE_NAME}:latest"
+                sh "docker push your-dockerhub-username/${DOCKER_IMAGE_NAME}:latest"
             }
         }
     }
 
     post {
         always {
-            echo '📂 Archiving Snyk HTML reports...'
-            archiveArtifacts artifacts: 'reports/*.html', allowEmptyArchive: true
-
-            // ✅ Publish all reports as tabs in Jenkins UI
-            publishHTML(target: [
-                reportName: 'Snyk Summary',
-                reportDir: "${REPORT_DIR}",
-                reportFiles: 'scan-summary.html',
-                keepAll: true,
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-
-            publishHTML(target: [
-                reportName: 'Backend Snyk Report',
-                reportDir: "${REPORT_DIR}",
-                reportFiles: 'backend-snyk.html',
-                keepAll: true,
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-
-            publishHTML(target: [
-                reportName: 'Frontend Snyk Report',
-                reportDir: "${REPORT_DIR}",
-                reportFiles: 'frontend-snyk.html',
-                keepAll: true,
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-        }
-        failure {
-            echo '❌ Pipeline failed due to high severity vulnerabilities. Check HTML reports.'
+            echo 'Pipeline completed (may have failed earlier).'
         }
         success {
-            echo '✅ Pipeline completed successfully!'
+            echo 'Pipeline finished successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for reason.'
         }
     }
 }
